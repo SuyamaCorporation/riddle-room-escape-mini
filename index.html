@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>謎解き脱出ゲームミニ版</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+<div id="app" class="max-w-2xl mx-auto p-4">
+  <div class="text-center mb-4">
+    <h1 class="text-2xl font-bold text-purple-400">🔐 謎解き脱出ゲーム</h1>
+    <div class="flex justify-center gap-6 mt-2 text-sm">
+      <div>部屋: <span id="room-num" class="text-yellow-300 font-bold">1</span>/5</div>
+      <div>ヒント: <span id="hints-left" class="text-blue-300 font-bold">3</span>回残り</div>
+      <div>時間: <span id="timer" class="text-red-300 font-bold">00:00</span></div>
+    </div>
+  </div>
+
+  <div id="game-area" class="bg-gray-800 rounded-lg p-6 mb-4 min-h-64">
+    <div id="room-title" class="text-xl font-bold text-purple-300 mb-3"></div>
+    <div id="room-desc" class="text-gray-200 mb-4 leading-relaxed"></div>
+    <div id="items-found" class="mb-4"></div>
+    <div id="puzzle-area" class="bg-gray-700 rounded p-4 mb-4">
+      <div id="puzzle-desc" class="text-yellow-200 mb-3"></div>
+      <div id="puzzle-input-area" class="flex gap-2">
+        <input id="answer-input" type="text" placeholder="答えを入力..." class="flex-1 bg-gray-600 rounded px-3 py-2 text-white" aria-label="謎の答え">
+        <button id="submit-btn" class="bg-purple-600 hover:bg-purple-700 rounded px-4 py-2 font-bold">解く</button>
+      </div>
+      <div id="answer-feedback" class="mt-2 text-sm"></div>
+    </div>
+    <div class="flex gap-2">
+      <button id="hint-btn" class="bg-blue-700 hover:bg-blue-800 rounded px-4 py-2 text-sm">💡 ヒント</button>
+    </div>
+    <div id="hint-text" class="hidden mt-3 bg-blue-900 rounded p-3 text-sm text-blue-200"></div>
+  </div>
+
+  <div id="end-screen" class="hidden bg-gray-800 rounded-lg p-6 text-center">
+    <div id="end-emoji" class="text-6xl mb-3"></div>
+    <div id="end-title" class="text-2xl font-bold mb-2"></div>
+    <div id="end-desc" class="text-gray-300 mb-4"></div>
+    <div id="end-stats" class="bg-gray-700 rounded p-3 mb-4 text-sm"></div>
+    <div id="endings-collected" class="mb-4"></div>
+    <button id="restart-btn" class="bg-purple-600 hover:bg-purple-700 rounded-lg px-6 py-3 font-bold">もう一度プレイ</button>
+  </div>
+</div>
+<script>
+const rooms = [
+  {
+    id: 1,
+    title: '第1部屋：古びた書斎',
+    desc: '埃っぽい書斎に閉じ込められた。棚には古い本が並んでいる。扉には4桁の数字ロックがかかっている。机の上には「ABC」と書かれたメモがある。本棚をよく見ると、A=1, B=3, C=2 と書かれたページが見える。',
+    puzzle: 'A+B+C、A×B、B-A、C+A をこの順に並べると？（4桁の数字）',
+    answer: '6213',
+    hint: 'A=1, B=3, C=2。順番に計算すると：1+3+2=6、1×3=3、3-1=2、2+1=3',
+    item: '🗝️ 古い鍵',
+  },
+  {
+    id: 2,
+    title: '第2部屋：謎の実験室',
+    desc: '不思議な実験室。棚に色つきのビーカーが並んでいる。扉には色の順序を入力する装置がある。壁に「赤は最初、青は赤の2つ後、緑は青の前、黄は最後」と書かれている。',
+    puzzle: '4色（赤・青・緑・黄）の正しい順序を番号で入力（例: 赤=1, 青=2, 緑=3, 黄=4）',
+    answer: '1324',
+    hint: '赤が1番目。黄が4番目。青は赤の2つ後→3番目。緑は青の前→2番目。 順序: 赤→緑→青→黄 = 1324',
+    item: '🧪 試験管',
+  },
+  {
+    id: 3,
+    title: '第3部屋：時計の間',
+    desc: '壁中に時計がある部屋。全ての時計が止まっている。ドアには「正しい時刻」を示す3桁コードが必要。大時計は3時、中時計は15分、小時計は15秒を指している。コードは「時+分+秒÷5」。',
+    puzzle: '3時・15分・15秒。コードは「時+分+秒÷5」の合計を2桁、次に秒÷5を1桁。',
+    answer: '213',
+    hint: '時=3、分=15、秒=15。秒÷5=3。時+分+(秒÷5) = 3+15+3=21。コード: 21と3→213',
+    item: '⏰ 時計の針',
+  },
+  {
+    id: 4,
+    title: '第4部屋：音楽室',
+    desc: 'ピアノが一台ある音楽室。楽譜が散らばっている。鍵盤には数字が振られている（ド=1,レ=2,ミ=3,ファ=4,ソ=5,ラ=6,シ=7）。扉のコードは楽譜の最初の4音。楽譜には「ドミソミ」と書いてある。',
+    puzzle: 'ド=1 レ=2 ミ=3 ファ=4 ソ=5 ラ=6 シ=7。「ドミソミ」を数字で答えよ（4桁）',
+    answer: '1353',
+    hint: 'ド=1, ミ=3, ソ=5, ミ=3。並べると1353',
+    item: '🎵 楽譜の断片',
+  },
+  {
+    id: 5,
+    title: '最終部屋：脱出の間',
+    desc: '集めたアイテムを使う最終部屋。扉は4つの記号でロックされている。「🗝️と⏰は数字1と3を示す。🧪と🎵は数字2と4を示す。順序は発見した順番」。',
+    puzzle: 'アイテムを発見した順に数字を並べよ（部屋1=1, 2=2, 3=3, 4=4）',
+    answer: '1234',
+    hint: '各部屋で1→2→3→4の順にアイテムを取得した。答えは1234',
+    item: '🏆 自由',
+  },
+];
+
+let currentRoom = 0;
+let hintsLeft = 3;
+let hintUsed = 0;
+let startTime = Date.now();
+let timerInterval = null;
+let cleared = false;
+let endingsCollected = JSON.parse(localStorage.getItem('escape-endings') || '[]');
+
+function updateTimer() {
+  if (cleared) return;
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(elapsed / 60).toString().padStart(2,'0');
+  const s = (elapsed % 60).toString().padStart(2,'0');
+  document.getElementById('timer').textContent = m + ':' + s;
+}
+
+function renderRoom() {
+  const room = rooms[currentRoom];
+  document.getElementById('room-num').textContent = currentRoom + 1;
+  document.getElementById('hints-left').textContent = hintsLeft;
+  document.getElementById('room-title').textContent = room.title;
+  document.getElementById('room-desc').textContent = room.desc;
+  document.getElementById('puzzle-desc').textContent = '🧩 謎: ' + room.puzzle;
+  document.getElementById('answer-feedback').textContent = '';
+  document.getElementById('answer-feedback').className = 'mt-2 text-sm';
+  document.getElementById('hint-text').classList.add('hidden');
+  document.getElementById('answer-input').value = '';
+
+  const itemsDiv = document.getElementById('items-found');
+  itemsDiv.innerHTML = '';
+  if (currentRoom > 0) {
+    const collected = rooms.slice(0, currentRoom).map(r => r.item);
+    const p = document.createElement('p');
+    p.className = 'text-xs text-gray-400 mb-2';
+    p.textContent = '取得アイテム: ' + collected.join(' ');
+    itemsDiv.appendChild(p);
+  }
+}
+
+document.getElementById('submit-btn').addEventListener('click', checkAnswer);
+document.getElementById('answer-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') checkAnswer();
+});
+
+function checkAnswer() {
+  const input = document.getElementById('answer-input').value.trim();
+  const room = rooms[currentRoom];
+  const feedback = document.getElementById('answer-feedback');
+
+  if (input === room.answer) {
+    feedback.textContent = '✅ 正解！' + room.item + 'を取得した！';
+    feedback.className = 'mt-2 text-sm text-green-400';
+    setTimeout(() => {
+      currentRoom++;
+      if (currentRoom >= rooms.length) {
+        showEnding();
+      } else {
+        renderRoom();
+      }
+    }, 1500);
+  } else {
+    feedback.textContent = '❌ 違います。もう一度考えてみよう。';
+    feedback.className = 'mt-2 text-sm text-red-400';
+  }
+}
+
+document.getElementById('hint-btn').addEventListener('click', () => {
+  if (hintsLeft <= 0) {
+    alert('ヒントを使い切りました！');
+    return;
+  }
+  hintsLeft--;
+  hintUsed++;
+  document.getElementById('hints-left').textContent = hintsLeft;
+  document.getElementById('hint-text').textContent = '💡 ' + rooms[currentRoom].hint;
+  document.getElementById('hint-text').classList.remove('hidden');
+});
+
+function showEnding() {
+  cleared = true;
+  clearInterval(timerInterval);
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+
+  let endingType;
+  if (hintUsed === 0 && elapsed < 300) {
+    endingType = '天才エンディング';
+    document.getElementById('end-emoji').textContent = '🌟';
+    document.getElementById('end-title').textContent = '完全脱出！天才的！';
+  } else if (hintUsed <= 1) {
+    endingType = '優秀エンディング';
+    document.getElementById('end-emoji').textContent = '🏆';
+    document.getElementById('end-title').textContent = '見事脱出！';
+  } else {
+    endingType = 'ノーマルエンディング';
+    document.getElementById('end-emoji').textContent = '🎉';
+    document.getElementById('end-title').textContent = '脱出成功！';
+  }
+
+  document.getElementById('end-desc').textContent = '全5部屋をクリアして脱出しました！';
+  document.getElementById('end-stats').innerHTML = '';
+  const p = document.createElement('p');
+  p.textContent = `クリアタイム: ${m}分${s}秒 | ヒント使用: ${hintUsed}回`;
+  document.getElementById('end-stats').appendChild(p);
+
+  if (!endingsCollected.includes(endingType)) {
+    endingsCollected.push(endingType);
+    localStorage.setItem('escape-endings', JSON.stringify(endingsCollected));
+  }
+
+  const endDiv = document.getElementById('endings-collected');
+  endDiv.innerHTML = '';
+  const all = ['天才エンディング', '優秀エンディング', 'ノーマルエンディング'];
+  const p2 = document.createElement('p');
+  p2.className = 'text-xs text-gray-400 mb-1';
+  p2.textContent = '収集エンディング:';
+  endDiv.appendChild(p2);
+  all.forEach(e => {
+    const badge = document.createElement('span');
+    badge.className = 'inline-block mr-2 px-2 py-0.5 rounded text-xs ' +
+      (endingsCollected.includes(e) ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-500');
+    badge.textContent = e;
+    endDiv.appendChild(badge);
+  });
+
+  document.getElementById('game-area').classList.add('hidden');
+  document.getElementById('end-screen').classList.remove('hidden');
+}
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+  currentRoom = 0;
+  hintsLeft = 3;
+  hintUsed = 0;
+  startTime = Date.now();
+  cleared = false;
+  document.getElementById('end-screen').classList.add('hidden');
+  document.getElementById('game-area').classList.remove('hidden');
+  renderRoom();
+});
+
+timerInterval = setInterval(updateTimer, 1000);
+renderRoom();
+</script>
+</body>
+</html>
